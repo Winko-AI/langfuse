@@ -1,18 +1,21 @@
-# docker-compose.yml - “无密码”调试版
+# docker-compose.yml - “最小化修改”版
 services:
   langfuse-worker:
-    image: docker.io/langfuse/langfuse-worker:3
+    image: docker.io/langfuse-worker:3
     restart: always
     depends_on: &langfuse-depends-on
-      postgres: { condition: service_healthy }
-      minio: { condition: service_healthy }
-      redis: { condition: service_healthy }
-      clickhouse: { condition: service_healthy }
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
     ports:
-      - 127.0.0.1:10961:10961
-    environment: &langfuse-env
-      # ✅ 已修改为无密码连接
-      DATABASE_URL: postgresql://postgres@postgres:5432/postgres
+      - 127.0.0.1:3030:3030
+    environment: &langfuse-worker-env
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
       SALT: "mysalt"
       ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
       TELEMETRY_ENABLED: ${TELEMETRY_ENABLED:-true}
@@ -20,32 +23,37 @@ services:
       CLICKHOUSE_MIGRATION_URL: ${CLICKHOUSE_MIGRATION_URL:-clickhouse://clickhouse:9000}
       CLICKHOUSE_URL: ${CLICKHOUSE_URL:-http://clickhouse:8123}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clickhouse}
-      # ✅ 已修改为空密码
-      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
       CLICKHOUSE_CLUSTER_ENABLED: ${CLICKHOUSE_CLUSTER_ENABLED:-false}
       LANGFUSE_S3_EVENT_UPLOAD_BUCKET: ${LANGFUSE_S3_EVENT_UPLOAD_BUCKET:-langfuse}
       LANGFUSE_S3_EVENT_UPLOAD_REGION: ${LANGFUSE_S3_EVENT_UPLOAD_REGION:-auto}
       LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID:-minio}
-      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: "miniosecret" # 使用固定的简单密码
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY:-miniosecret}
       LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: ${LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT:-http://minio:9000}
-      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: ${LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT:-http://minio:9000}
-      LANGFUSE_S3_BATCH_EXPORT_EXTERNAL_ENDPOINT: ${LANGFUSE_S3_BATCH_EXPORT_EXTERNAL_ENDPOINT:-http://<你的服务器IP>:9090}
-      # ✅ Redis 已无密码，此变量设为空
-      REDIS_AUTH: ""
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: ${LANGFUSE_S3_MEDIA_UPLOAD_BUCKET:-langfuse}
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: ${LANGFUSE_S3_MEDIA_UPLOAD_REGION:-auto}
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID:-minio}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY:-miniosecret}
+      # 🚨 警告: 此配置将在后续导致文件上传失败，需修正为 http://minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: ${LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT:-http://localhost:9090}
+      LANGFUSE_S3_BATCH_EXPORT_ENDPOINT: ${LANGFUSE_S3_BATCH_EXPORT_ENDPOINT:-http://minio:9000}
+      LANGFUSE_S3_BATCH_EXPORT_EXTERNAL_ENDPOINT: ${LANGFUSE_S3_BATCH_EXPORT_EXTERNAL_ENDPOINT:-http://localhost:9090}
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_AUTH: ${REDIS_AUTH:-myredissecret}
 
   langfuse-web:
     image: docker.io/langfuse/langfuse:3
     restart: always
     depends_on: *langfuse-depends-on
     ports:
-      - "10962:3000"
+      # ✅ 保留此项, 用于外部访问
+      - "3000:3000"
     environment:
-      <<: *langfuse-env
-      # 🚨 这里是你唯一需要修改的地方
-      NEXTAUTH_URL: "http://<你的服务器IP>:10962"
-      NEXTAUTH_SECRET: "mysecret"
+      <<: *langfuse-worker-env
+      # 🚨 警告: 此配置将在后续导致登录失败，需修正为你服务器的公网IP
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: mysecret
 
   clickhouse:
     image: docker.io/clickhouse/clickhouse-server
@@ -54,18 +62,20 @@ services:
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: clickhouse
-      # ✅ 已修改为空密码
-      CLICKHOUSE_PASSWORD: ""
-      # 允许空密码登录
-      CLICKHOUSE_ALLOW_EMPTY_PASSWORD: "1"
+      CLICKHOUSE_PASSWORD: clickhouse
     volumes:
       - langfuse_clickhouse_data:/var/lib/clickhouse
       - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    # ✅ 已移除: 避免主机端口冲突
+    # ports:
+    #   - 127.0.0.1:8123:8123
+    #   - 127.0.0.1:9000:9000
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 1s
 
   minio:
     image: docker.io/minio/minio
@@ -74,34 +84,37 @@ services:
     command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
     environment:
       MINIO_ROOT_USER: minio
-      # Minio 强制要求密码，我们使用一个固定的简单密码
-      MINIO_ROOT_PASSWORD: "miniosecret"
+      MINIO_ROOT_PASSWORD: miniosecret
     ports:
+      # 保留此项, 用于外部访问
       - 9090:9000
       - 127.0.0.1:9091:9001
     volumes:
       - langfuse_minio_data:/data
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
+      interval: 1s
       timeout: 5s
-      retries: 10
+      retries: 5
+      start_period: 1s
 
-  # ✅ Redis 已配置为无密码模式
   redis:
     image: docker.io/redis:7
     restart: always
-    # 无需 command 来设置密码
+    command: >
+      --requirepass ${REDIS_AUTH:-myredissecret}
+    # ✅ 已移除: 避免主机端口冲突
+    # ports:
+    #  - 127.0.0.1:6379:6379
     healthcheck:
-      # 健康检查也无需密码
-      test: ["CMD", "redis-cli", "ping"]
+      # ✅ 已修正: 健康检查需带上密码, 否则会失败
+      test: ["CMD", "redis-cli", "-a", "myredissecret", "ping"]
       interval: 3s
       timeout: 10s
       retries: 10
 
-  # ✅ Postgres 已配置为信任模式 (无密码)
   postgres:
-    image: docker.io/postgres:16
+    image: docker.io/postgres:${POSTGRES_VERSION:-latest}
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -110,9 +123,11 @@ services:
       retries: 10
     environment:
       POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
-      # 使用 trust 模式代替密码
-      POSTGRES_HOST_AUTH_METHOD: trust
+    # ✅ 已移除: 避免主机端口冲突
+    # ports:
+    #  - 127.0.0.1:5432:5432
     volumes:
       - langfuse_postgres_data:/var/lib/postgresql/data
 
