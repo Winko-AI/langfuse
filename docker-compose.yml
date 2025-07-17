@@ -19,7 +19,7 @@ services:
     ports:
       - 127.0.0.1:10961:3030
     environment: &langfuse-worker-env
-      DATABASE_URL: postgresql://postgres:postgres@postgres:15432/postgres # CHANGEME
+      DATABASE_URL: postgresql://postgres:postgres@5.175.249.252:15432/postgres # CHANGEME
       SALT: "mysalt" # CHANGEME
       ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000" # CHANGEME: generate via `openssl rand -hex 32`
       TELEMETRY_ENABLED: ${TELEMETRY_ENABLED:-true}
