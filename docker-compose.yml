@@ -68,7 +68,7 @@ services:
     restart: always
     depends_on: *langfuse-depends-on
     ports:
-      - 10962:10962
+      - 10962:3000
     environment:
       <<: *langfuse-worker-env
       NEXTAUTH_URL: http://localhost:10962
