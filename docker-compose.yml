@@ -1,7 +1,7 @@
 # Make sure to update the credential placeholders with your own secrets.
 # We mark them with # CHANGEME in the file below.
 # In addition, we recommend to restrict inbound traffic on the host to langfuse-web (port 3000) and minio (port 9090) only.
-# All other components are bound to localhost (127.0.0.1) to only accept connections from the local machine.
+# All other components are bound to localhost (0.0.0.0) to only accept connections from the local machine.
 # External connections from other machines will not be able to reach these services directly.
 services:
   langfuse-worker:
@@ -17,7 +17,7 @@ services:
       clickhouse:
         condition: service_healthy
     ports:
-      - 127.0.0.1:10961:3030
+      - 0.0.0.0:10961:3030
     environment: &langfuse-worker-env
       DATABASE_URL: postgresql://postgres:postgres@5.175.249.252:15432/postgres # CHANGEME
       SALT: "mysalt" # CHANGEME
@@ -95,8 +95,8 @@ services:
       - langfuse_clickhouse_data:/var/lib/clickhouse
       - langfuse_clickhouse_logs:/var/log/clickhouse-server
     ports:
-      - 127.0.0.1:18123:8123
-      - 127.0.0.1:19000:9000
+      - 0.0.0.0:18123:8123
+      - 0.0.0.0:19000:9000
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
       interval: 5s
@@ -115,7 +115,7 @@ services:
       MINIO_ROOT_PASSWORD: miniosecret # CHANGEME
     ports:
       - 19090:9000
-      - 127.0.0.1:19091:9001
+      - 0.0.0.0:19091:9001
     volumes:
       - langfuse_minio_data:/data
     healthcheck:
@@ -132,7 +132,7 @@ services:
     command: >
       --requirepass ${REDIS_AUTH:-myredissecret}
     ports:
-      - 127.0.0.1:16379:6379
+      - 0.0.0.0:16379:6379
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
@@ -152,7 +152,7 @@ services:
       POSTGRES_PASSWORD: postgres # CHANGEME
       POSTGRES_DB: postgres
     ports:
-      - 127.0.0.1:15432:5432
+      - 0.0.0.0:15432:5432
     volumes:
       - langfuse_postgres_data:/var/lib/postgresql/data
 
