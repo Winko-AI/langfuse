@@ -68,10 +68,10 @@ services:
     restart: always
     depends_on: *langfuse-depends-on
     ports:
-      - 3000:3000
+      - 127.0.0.1:10962:3000
     environment:
       <<: *langfuse-worker-env
-      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_URL: http://localhost:10962
       NEXTAUTH_SECRET: mysecret # CHANGEME
       LANGFUSE_INIT_ORG_ID: ${LANGFUSE_INIT_ORG_ID:-}
       LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME:-}
